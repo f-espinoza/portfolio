@@ -1,7 +1,7 @@
 # Portfolio
 
 Personal portfolio. Showing some of my skills in different tools.
-Here you will find code for SQL, Python and R.
+Here you will find code for SQL, Power Bi, Python and R.
 
 ## You can find me in other platforms:
 
