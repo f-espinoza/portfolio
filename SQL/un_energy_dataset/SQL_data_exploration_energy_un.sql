@@ -121,6 +121,13 @@ ORDER BY PercentageDifSouthAmerica DESC
 
 -- RETURNING TO THE ENTIRE DATASET
 
+-- THE AVERAGE PRIMARY ENERGY PRODUCTION BY COUNTRY from 1995 to 2018 comparing with the value of each year.
+
+SELECT CoReg, Years, Series, Value,
+       AVG(Value) OVER (PARTITION BY CoReg ORDER BY CoReg) AS CountryAvg
+FROM un_energia_clean_csv
+WHERE Series = 'Primary energy production (petajoules)'  
+
 -- NUMBER OF COUNTRIES WITH NEGATIVE AND POSITIVE CHANGES OF STOCK IN 2018
 
 SELECT Series, Years, COUNT(CASE WHEN Value > 0 THEN 'Positive' END) AS PosValues,
