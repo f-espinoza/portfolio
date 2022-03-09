@@ -1,6 +1,7 @@
 -- Energy production, trade and consumption
 -- dataset from data.un.org
 -- Updated: 1-Nov-2021
+-- SQLite database
 
 -- One of the tables has a name that corresponds
 -- to a SQL function, so we can change it from
@@ -24,7 +25,7 @@ FROM un_energia_clean_csv;
 
 -- We can see that the years of this dataset goes from 1995 to 2018.
 
--- Let's see what are all the diferent values for Region, Country and Area.
+-- Let's see what are all the different values for Region, Country and Area.
 
 SELECT DISTINCT(CoReg)
 FROM un_energia_clean_csv
@@ -48,32 +49,35 @@ AND Years = 2018
 -- COMPARING THE SUPPLY PER CAPITA IN GIGAJOULES BETWEEN SOUTH AMERICA, NORTH AMERICA AND EUROPE.
 
 SELECT CoReg, Years, Series, Value
-FROM (
-	SELECT *
-	FROM un_energia_clean_csv
-	WHERE Series = 'Supply per capita (gigajoules)'
-	)
+FROM un_energia_clean_csv
 WHERE CoReg IN ('North America', 'South America', 'Europe')
+AND Series = 'Supply per capita (gigajoules)'
 AND Years = 2018
 
 
 -- CALCULATING PERCENTAGE DIFFERENCE BETWEEN SOUTH AMERICAN SUPPLY PER CAPITA 
 -- AND OTHER REGIONS OF THE WORLD.
 
-SELECT CoReg, Years, Series, (Value-55)*100/55 as PercentageDifSASupplyPc
-FROM (
+WITH south_am AS (
 	SELECT *
 	FROM un_energia_clean_csv
-	WHERE Series = 'Supply per capita (gigajoules)'
+	WHERE CoReg = 'South America'
+	AND Series = 'Supply per capita (gigajoules)'
+	AND Years = 2018
 	)
-WHERE CoReg IN ('Africa', 'North America', 'South  America', 'Asia', 'Europe','Oceania')
+SELECT CoReg, Years, Series, (Value-(SELECT Value FROM south_am))*100/(SELECT Value FROM south_am) 
+	AS PercentageDifSASupplyPc
+FROM un_energia_clean_csv
+WHERE CoReg IN ('Africa', 'North America', 'Asia', 'Europe','Oceania')
 AND Years = 2018
+AND  Series = 'Supply per capita (gigajoules)'
 ORDER BY PercentageDifSASupplyPc DESC
 
 
 -- COMPARING EIGHT COUNTRIES OF SOUTH AMERICA. THEIR PRIMARY ENERGY PRODUCTION AND NET IMPORTS.
 
--- Note: the first time I tried this query Bolivia didn't appear. That time I wrote 'Bolivia', so I searched for the country with WHERE:
+-- Note: the first time I tried this query Bolivia didn't appear. That time I wrote 'Bolivia', so I searched for 
+-- the country with WHERE:
 
 SELECT *
 FROM un_energia_clean_csv
@@ -86,7 +90,8 @@ SELECT CoReg, Years, Series, Value
 FROM (
 	SELECT *
 	FROM un_energia_clean_csv
-	WHERE Series IN ('Primary energy production (petajoules)', 'Net imports [Imports - Exports - Bunkers] (petajoules)', 'Supply per capita (gigajoules)')
+	WHERE Series IN ('Primary energy production (petajoules)', 'Net imports [Imports - Exports - Bunkers] (petajoules)', 
+			 'Supply per capita (gigajoules)')
 	)
 WHERE CoReg IN ('Brazil', 'Chile', 'Argentina', 'Peru', 'Uruguay', 'Bolivia (Plurin. State of)', 'Colombia', 'Ecuador')
 AND Years = 2018
@@ -97,26 +102,32 @@ AND Years = 2018
 -- First we find the lowest supply per capita between the selected countries.
 
 SELECT CoReg, Years, Series, MIN(Value)
-FROM (
-	SELECT *
-	FROM un_energia_clean_csv
-	WHERE Series = 'Supply per capita (gigajoules)'
-	)
-WHERE CoReg IN ('Brazil', 'Chile', 'Argentina', 'Peru', 'Uruguay', 'Bolivia (Plurin. State of)', 'Colombia', 'Ecuador')
+FROM un_energia_clean_csv
+WHERE CoReg IN ('Brazil', 'Chile', 'Argentina', 'Peru', 'Uruguay', 
+	'Bolivia (Plurin. State of)', 'Colombia', 'Ecuador')
+AND Series = 'Supply per capita (gigajoules)'
 AND Years = 2018
 
 
--- After that we can apply the same method that we did before.
+-- After that we can apply the same method that we used before.
 
-SELECT CoReg, Years, Series, (Value-31)*100/31 AS PercentageDifSouthAmerica
-FROM (
-	SELECT *
+WITH min_value as (
+	SELECT MIN(Value) AS sa_min
 	FROM un_energia_clean_csv
-	WHERE Series = 'Supply per capita (gigajoules)'
-	)
-WHERE CoReg IN ('Brazil', 'Chile', 'Argentina', 'Peru', 'Uruguay', 'Bolivia (Plurin. State of)', 'Colombia','Ecuador')
+	WHERE CoReg IN ('Brazil', 'Chile', 'Argentina', 'Peru', 'Uruguay', 
+		'Bolivia (Plurin. State of)', 'Colombia', 'Ecuador')
+	AND Series = 'Supply per capita (gigajoules)'
+	AND Years = 2018
+)
+SELECT CoReg, Years, Series, ((Value-(SELECT * FROM min_value))*100)/(SELECT * FROM min_value) 
+	AS PercentageDifSouthAmerica
+FROM un_energia_clean_csv
+WHERE CoReg IN ('Brazil', 'Chile', 'Argentina', 'Uruguay', 
+	'Bolivia (Plurin. State of)', 'Colombia','Ecuador')
+AND Series = 'Supply per capita (gigajoules)'
 AND Years = 2018
 ORDER BY PercentageDifSouthAmerica DESC
+
 
 
 -- RETURNING TO THE ENTIRE DATASET
@@ -133,7 +144,8 @@ WHERE Series = 'Primary energy production (petajoules)'
 SELECT Series, Years, COUNT(CASE WHEN Value > 0 THEN 'Positive' END) AS PosValues,
 	COUNT(CASE WHEN Value < 0 THEN 'Negative' END) AS NegValues
 FROM un_energia_clean_csv
-WHERE CoReg NOT IN ('Africa', 'North America', 'South America', 'Asia', 'Europe','Oceania')
+WHERE CoReg NOT IN ('Africa', 'North America', 'South America', 'Asia', 'Europe','Oceania', 
+		    'Total, all countries or areas')
 AND Series = 'Changes in stocks (petajoules)'
 AND Years=2018
 
@@ -142,14 +154,16 @@ AND Years=2018
 
 SELECT CoReg, Years, CAST(Value AS numeric) AS Value
 FROM un_energia_clean_csv
-WHERE CoReg NOT IN ('Africa', 'North America', 'South America', 'Asia', 'Europe','Oceania')
+WHERE CoReg NOT IN ('Africa', 'North America', 'South America', 'Asia', 'Europe','Oceania', 
+		    'Total, all countries or areas')
 AND series = 'Changes in stocks (petajoules)' 
 AND value < 0
 AND Years = 2018
 ORDER BY Value
 
 
--- We can see WHICH COUNTRY HAS THE HIGHEST SUPPLY PER CAPITA, THE LOWEST IMPORTS AND THE HIGHEST ONES.
+-- We can see WHICH COUNTRY HAS THE HIGHEST SUPPLY PER CAPITA, THE LOWEST IMPORTS AND THE HIGHEST ONES
+-- from 1995 to 2018.
 
 -- HIGHEST SUPPLY PER CAPITA
 
@@ -171,7 +185,7 @@ AND Years = 2018
 -- Iceland, with 1087 gigajoules per capita.
 
 
--- NET IMPORTS: a POSITIVE value means that a country or region imports more more than it exports. 
+-- NET IMPORTS: a POSITIVE value means that a country or region imports more than it exports. 
 
 
 -- The LOWEST NET IMPORTS in 2018.
@@ -181,7 +195,8 @@ FROM un_energia_clean_csv
 WHERE Series = 'Net imports [Imports - Exports - Bunkers] (petajoules)'
 AND Years = 2018
 
--- Russian Federation, with -29,521 petajoules. Which means that the Russian Federation was, in 2018, world's biggest energy exporter.
+-- Russian Federation, with -29,521 petajoules. Which means that the Russian Federation was, in 2018, 
+-- world's biggest energy exporter.
 
 
 -- The HIGHEST NET IMPORTS, 2018.
@@ -201,7 +216,23 @@ FROM un_energia_clean_csv
 WHERE Series = 'Net imports [Imports - Exports - Bunkers] (petajoules)'
 AND Years=2018
 
+-- 167 importers and 48 exporters.
 
+-- What are these exporter countries?
+-- List of the 48 exporter countries in 2018:
+
+SELECT Series, Years, CoReg, Value
+FROM un_energia_clean_csv
+WHERE Series = 'Net imports [Imports - Exports - Bunkers] (petajoules)'
+AND CoReg NOT IN ('Africa', 'North America', 'South America', 'Asia', 'Europe','Oceania',
+ 'Total, all countries or areas')
+AND Value < 0
+AND Years = 2018
+
+
+
+-- With the current crisis in mind. What are the differences between Germany and the Russian Federation in terms
+-- of energy dependence.
 
 -- WHAT IS THE EVOLUTION OF ENERGY PRODUCTION IN GERMANY?
 
@@ -212,7 +243,14 @@ WHERE CoReg = 'Germany'
 -- As we can see, the supply per capita in Germany has been decreasing since 2010.
 -- we can calculate the percentage of the reduction compared with base year 2010:
 
-SELECT CoReg, Years, Series, (Value-171)*100/171 as PercentageDiff
+WITH ger_prev as (
+	SELECT Value
+	FROM un_energia_clean_csv
+	WHERE Series = 'Supply per capita (gigajoules)'
+	AND CoReg = 'Germany'
+	AND Years = 2000
+	)
+SELECT CoReg, Years, Series, (Value-(SELECT Value FROM ger_prev))*100/(SELECT Value FROM ger_prev) as PercentageDiff
 FROM un_energia_clean_csv
 WHERE CoReg = 'Germany'
 AND Series = 'Supply per capita (gigajoules)'
@@ -223,7 +261,14 @@ AND Years BETWEEN 2010 AND 2018
 -- We can see that the primary energy production also decreased, but the Net imports were really stable.
 -- Let's calculate the percentage variation of primary energy production from 1995 to 2018.
 
-SELECT CoReg, Years, Series,  (Value-6050)*100/6050 as PercentageDiff
+WITH ger_prev as (
+	SELECT Value
+	FROM un_energia_clean_csv
+	WHERE Series = 'Primary energy production (petajoules)'
+	AND CoReg = 'Germany'
+	AND Years = 1995
+	)
+SELECT CoReg, Years, Series,  (Value-(SELECT Value FROM ger_prev))*100/(SELECT Value FROM ger_prev) as PercentageDiff
 FROM un_energia_clean_csv
 WHERE CoReg = 'Germany'
 AND Series = 'Primary energy production (petajoules)'
@@ -239,14 +284,35 @@ WHERE CoReg = 'Russian Federation'
 
 -- We can calculate in the same way we did with Germany:
 
-SELECT CoReg, Years, Series, (Value-40589)*100/40589 as PercentageDiff
+WITH russ_prev as(
+	SELECT Value
+	FROM un_energia_clean_csv
+	WHERE CoReg = 'Russian Federation'
+	AND Series = 'Primary energy production (petajoules)'
+	AND Years = 1995
+	)
+SELECT CoReg, Years, Series, (Value-(SELECT Value FROM russ_prev))*100/(SELECT Value FROM russ_prev) as PercentageDiff
 FROM un_energia_clean_csv
 WHERE CoReg = 'Russian Federation'
 AND Series = 'Primary energy production (petajoules)'
 
 -- Since 1995 the primary energy production in the Russian Federation has increased 53%.
 
--- We can get the variable value for the base year with a function, with this we don't need to type the specific number for the function.
+
+WITH prev_value as (
+	SELECT MIN(Value) AS min_value
+	FROM un_energia_clean_csv 
+	WHERE Series = 'Supply per capita (gigajoules)' 
+	AND CoReg = 'Russian Federation'
+	AND Years = 1995)
+SELECT CoReg, Years, Series, Value,
+	(Value-(SELECT min_value from prev_value))*100/(SELECT min_value from prev_value) AS PercentageDiff
+FROM un_energia_clean_csv
+WHERE CoReg = 'Russian Federation'
+AND Series = 'Supply per capita (gigajoules)'
+
+-- Other method you could use, a little more populated is to insert the complete subquery where 
+--'Value-(SELECT min_value from prev_value' is. 
 
 SELECT CoReg, Years, Series, Value,
 	(
@@ -270,7 +336,15 @@ AND Series = 'Supply per capita (gigajoules)'
 -- The change is remarkable between 2017 and 2018, let's see the percentage difference between 
 -- supply per capita from 2017 to 2018:
 
-SELECT CoReg, Years, Series, (Value-211)*100/211 as PercentageDiff
+WITH russ_2017 as (
+	SELECT Value
+	FROM un_energia_clean_csv
+	WHERE CoReg = 'Russian Federation'
+	AND Series = 'Supply per capita (gigajoules)'
+	AND Years = 2017
+	)
+SELECT CoReg, Years, Series, (Value-(SELECT Value FROM russ_2017))*100/(SELECT Value FROM russ_2017) 
+	AS PercentageDiff
 FROM un_energia_clean_csv
 WHERE CoReg = 'Russian Federation'
 AND Series = 'Supply per capita (gigajoules)'
@@ -279,12 +353,103 @@ AND Years = 2018
 -- From 2017 to 2018 the energy supply per capita in the Russian Federation 
 -- increased by 8%.
 
+-- Compare the previous data with the European Union data.
+-- NET IMPORTS AND ENERGY PRODUCTION OF THE EUROPEAN UNION:
+
+-- NET IMPORTS FOR EACH COUNTRY OF THE EUROPEAN UNION
+
+SELECT Series, CoReg, Years, Value
+FROM un_energia_clean_csv
+WHERE CoReg IN ('Austria', 'Belgium', 'Bulgaria', 'Croatia', 'Cyprus', 'Czechia', 
+'Denmark', 'Estonia', 'Finland', 'France', 'Germany', 'Greece', 'Hungary', 'Ireland', 'Italy', 
+'Latvia', 'Lithuania', 'Luxembourg', 'Malta', 'Netherlands', 'Poland', 'Portugal', 'Romania', 
+'Slovakia', 'Slovenia', 'Spain', 'Sweden')
+AND Years = 2018
+AND Series = 'Net imports [Imports - Exports - Bunkers] (petajoules)'
+
+-- AVERAGE NET IMPORTS FOR THE ENTIRE EU
+
+SELECT Series, AVG(Value)
+FROM un_energia_clean_csv
+WHERE CoReg IN ('Austria', 'Belgium', 'Bulgaria', 'Croatia', 'Cyprus', 'Czechia', 
+	'Denmark', 'Estonia', 'Finland', 'France', 'Germany', 'Greece', 'Hungary', 'Ireland', 'Italy', 
+	'Latvia', 'Lithuania', 'Luxembourg', 'Malta', 'Netherlands', 'Poland', 'Portugal', 'Romania', 
+	'Slovakia', 'Slovenia', 'Spain', 'Sweden')
+AND Years = 2018
+AND Series = 'Net imports [Imports - Exports - Bunkers] (petajoules)'
+
+-- The average Net imports for the EU is 1,240.14 petajoules.
+
+-- AVERAGE ENERGY PRODUCTION IN THE EU
+
+SELECT Series, AVG(Value)
+FROM un_energia_clean_csv
+WHERE CoReg IN ('Austria', 'Belgium', 'Bulgaria', 'Croatia', 'Cyprus', 'Czechia', 
+	'Denmark', 'Estonia', 'Finland', 'France', 'Germany', 'Greece', 'Hungary', 'Ireland', 'Italy', 
+	'Latvia', 'Lithuania', 'Luxembourg', 'Malta', 'Netherlands', 'Poland', 'Portugal', 'Romania', 
+	'Slovakia', 'Slovenia', 'Spain', 'Sweden')
+AND Years = 2018
+AND Series = 'Primary energy production (petajoules)'
+
+-- Average of 967.85 petajoules 
+
+
+-- WHAT IS THE DIFFERENCE BETWEEN AVERAGE EU ENERGY PRODUCTION AND 
+-- THE RUSSIAN FEDERATION PRODUCTION?
+
+WITH eu_prod AS(
+	SELECT AVG(Value) as AvgEu
+	FROM un_energia_clean_csv
+	WHERE CoReg IN ('Austria', 'Belgium', 'Bulgaria', 'Croatia', 'Cyprus', 'Czechia', 
+		'Denmark', 'Estonia', 'Finland', 'France', 'Germany', 'Greece', 'Hungary', 'Ireland', 'Italy', 
+		'Latvia', 'Lithuania', 'Luxembourg', 'Malta', 'Netherlands', 'Poland', 'Portugal', 'Romania', 
+		'Slovakia', 'Slovenia', 'Spain', 'Sweden')
+	AND Years = 2018
+	AND Series = 'Primary energy production (petajoules)'
+	),
+	russ_prod AS (
+	SELECT Value
+	FROM un_energia_clean_csv
+	WHERE CoReg = 'Russian Federation'
+	AND Series = 'Primary energy production (petajoules)'
+	AND Years = 2018
+	)
+SELECT ((SELECT AvgEu FROM eu_prod)/(SELECT Value FROM russ_prod))*100
+	AS PercOfRuss 
+
+-- The EU average energy production in 2018 is 1.5% of the Russian energy production for the same period.
+
+-- AND THE DIFFERENCE BETWEEN THE TOTAL PRIMARY ENERGY PRODUCTION OF THE EU AND THE RUSSIAN FEDERATION?
+
+	WITH eu_prod AS(
+	SELECT CAST(SUM(Value) AS FLOAT) AS SumEu
+	FROM un_energia_clean_csv
+	WHERE CoReg IN ('Austria', 'Belgium', 'Bulgaria', 'Croatia', 'Cyprus', 'Czechia', 
+		'Denmark', 'Estonia', 'Finland', 'France', 'Germany', 'Greece', 'Hungary', 'Ireland', 'Italy', 
+		'Latvia', 'Lithuania', 'Luxembourg', 'Malta', 'Netherlands', 'Poland', 'Portugal', 'Romania', 
+		'Slovakia', 'Slovenia', 'Spain', 'Sweden')
+	AND Years = 2018
+	AND Series = 'Primary energy production (petajoules)'
+	),
+	russ_prod AS (
+	SELECT Value
+	FROM un_energia_clean_csv
+	WHERE CoReg = 'Russian Federation'
+	AND Series = 'Primary energy production (petajoules)'
+	AND Years = 2018
+	)
+SELECT ((SELECT SumEu FROM eu_prod)/(SELECT Value FROM russ_prod))*100
+	AS PercOfRuss 
+
+-- The sum of the entire EU energy production is about 41% of the Russian production. 
+
 
 -- WHAT IS THE AVERAGE PRIMARY ENERGY PRODUCTION IN THE WORLD?
 
 SELECT Series, AVG(Value) as AvgWorld
 FROM un_energia_clean_csv
-WHERE CoReg NOT IN ('Africa', 'North America', 'South America', 'Asia', 'Europe','Oceania', 'Total, all countries or areas')
+WHERE CoReg NOT IN ('Africa', 'North America', 'South America', 'Asia', 'Europe','Oceania', 
+		    'Total, all countries or areas')
 AND Series = 'Primary energy production (petajoules)'
 AND Years = 2018
 
@@ -294,7 +459,8 @@ AND Years = 2018
 
 SELECT Series, AVG(Value) as AvWorld
 FROM un_energia_clean_csv
-WHERE CoReg NOT IN ('Africa', 'North America', 'South America', 'Asia', 'Europe','Oceania','Total, all countries or areas')
+WHERE CoReg NOT IN ('Africa', 'North America', 'South America', 'Asia', 'Europe','Oceania',
+		    'Total, all countries or areas')
 AND Series = 'Primary energy production (petajoules)'
 AND Years = 1995
 
@@ -303,6 +469,23 @@ AND Years = 1995
 -- THE AVERAGE GLOBAL PRIMARY ENERGY PRODUCTION HAS INCREASED SINCE 1995. 
 -- We can see the percentage difference.
 
-SELECT (2752-1903.44776119403)*100/1903.44776119403 as PercentageDiff
+WITH AvWorld_95 AS (
+	SELECT Series, AVG(Value) as AvWorld
+	FROM un_energia_clean_csv
+	WHERE CoReg NOT IN ('Africa', 'North America', 'South America', 'Asia', 'Europe','Oceania',
+		'Total, all countries or areas')
+	AND Series = 'Primary energy production (petajoules)'
+	AND Years = 1995 
+	),
+	AvWorld_18 AS (
+	SELECT Series, AVG(Value) as AvWorld
+	FROM un_energia_clean_csv
+	WHERE CoReg NOT IN ('Africa', 'North America', 'South America', 'Asia', 'Europe','Oceania',
+		'Total, all countries or areas')
+	AND Series = 'Primary energy production (petajoules)'
+	AND Years = 2018 
+	)
+SELECT ((SELECT AvWorld FROM AvWorld_18)-(SELECT AvWorld FROM AvWorld_95))*100/(SELECT AvWorld FROM AvWorld_95) 
+	as PercentageDiff
 
 -- The global average primary energy production has increased aprox. by 44.57%.
